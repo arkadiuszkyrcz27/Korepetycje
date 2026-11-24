@@ -27,7 +27,10 @@ export function parsujKwote(t) {
   return Math.round(parseFloat(s) * 100);
 }
 export function liczba(t, dom = 0) { const x = parseFloat(String(t ?? "").replace(",", ".")); return isNaN(x) ? dom : x; }
-export const km = x => (Math.round(x * 10) / 10).toString().replace(".", ",");
+// Zaokrąglenie „szkolne” (od połowy w górę) odporne na błędy liczb zmiennoprzecinkowych (8.925 * 100 = 892.4999…);
+// tak samo jak _zaokr() w dojazdy.py na komputerze (Decimal, ROUND_HALF_UP).
+export const zaokr = (x, miejsca = 0) => { const m = 10 ** miejsca; return Math.round(Number((x * m).toFixed(6))) / m; };
+export const km = x => zaokr(x, 1).toString().replace(".", ",");
 export function odmiana(n, jeden, kilka, wiele) {
   if (n === 1) return jeden;
   if (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) return kilka;
@@ -114,11 +117,14 @@ export const kluczNumeracji = (d, od) => od === "year" ? d.slice(0, 4) : d.slice
 // ---------------------------------------------------------------- obliczenia na danych (D = magazyn danych)
 export const uczniowiePlatnika = (D, p) => D.uczniowie.filter(u => klucz(u.platnik) === klucz(p));
 export function platnicy(D) {
-  const w = new Map();
+  const w = new Map();                               // klucz -> {pisownia: liczba wystąpień}
   for (const n of [...D.uczniowie.map(u => u.platnik), ...D.wplaty.map(w => w.platnik)]) {
-    const t = (n || "").trim(); if (t && !w.has(klucz(t))) w.set(klucz(t), t);
+    const t = (n || "").trim(); if (!t) continue;
+    const l = w.get(klucz(t)) || {}; l[t] = (l[t] || 0) + 1; w.set(klucz(t), l);
   }
-  return [...w.values()].sort((a, b) => a.localeCompare(b, "pl"));
+  // najczęstsza pisownia; remis - pierwsza w kolejności znaków (jak repo.wybierz_pisownie na komputerze)
+  const wybierz = l => Object.keys(l).sort((a, b) => l[b] - l[a] || (a < b ? -1 : a > b ? 1 : 0))[0];
+  return [...w.values()].map(wybierz).sort((a, b) => a.localeCompare(b, "pl"));
 }
 export function adresPlatnika(D, p) { const u = uczniowiePlatnika(D, p).find(u => u.adres_platnika); return u ? u.adres_platnika : ""; }
 export const lekcjeWplaty = (D, id) => D.wplaty_lekcje.filter(x => x.id_wplaty === id).map(x => x.id_lekcji);
@@ -230,29 +236,28 @@ export function kursyMiesiaca(D, r, m) {
   return D.lekcje.filter(l => l.data >= od && l.data <= doo).sort((a, b) => (a.data + a.od).localeCompare(b.data + b.od))
     .filter(l => l.status !== "odwolana" && zDojazdem(l, D.uczniowie.find(u => u.id === l.id_ucznia)))
     .map(l => { const u = D.uczniowie.find(x => x.id === l.id_ucznia);
-      return { id_lekcji: l.id, data: l.data, uczen: nazwaUcznia(u), adres: u ? adresJednaLinia(u.adres_platnika) : "", km: Math.round(2 * (u?.km || 0) * 10) / 10 }; });
+      return { id_lekcji: l.id, data: l.data, uczen: nazwaUcznia(u), adres: u ? adresJednaLinia(u.adres_platnika) : "", km: zaokr(2 * (u?.km || 0), 1) }; });
 }
-const r2 = x => Math.round(x * 100) / 100;
 export function obliczDojazdy(r) {
-  const k = Math.round(r.km * 10) / 10, proc = r.procent / 100, lpg = r.paliwo === "lpg";
+  const k = zaokr(r.km, 1), proc = r.procent / 100, lpg = r.paliwo === "lpg";
   let kwota, opis;
-  const l = x => r2(x).toString().replace(".", ",");
+  const l = (x, miejsca = 2) => zaokr(x, miejsca).toString().replace(".", ",");   // litry: wyniki 2, parametry 3 miejsca
   const c = g => (g / 100).toFixed(2).replace(".", ",");
   if (r.metoda === "paragony") {
     if (r.przebieg <= 0) return [0, "Podaj przebieg samochodu w miesiącu."];
     const udz = Math.min(1, k / r.przebieg), suma = r.suma_paragonow + (lpg ? r.paragony_benzyna : 0);
-    kwota = Math.round(suma * udz * proc);
-    opis = `${km(k)} km z ${km(r.przebieg)} km = ${(udz * 100).toFixed(1).replace(".", ",")}% × paragony ${c(suma)} zł`
+    kwota = zaokr(suma * udz * proc);
+    opis = `${km(k)} km z ${km(r.przebieg)} km = ${zaokr(udz * 100, 1).toFixed(1).replace(".", ",")}% × paragony ${c(suma)} zł`
       + (lpg ? ` (LPG ${c(r.suma_paragonow)} + benzyna ${c(r.paragony_benzyna)})` : "");
   } else if (lpg) {
     const lLpg = k * r.spalanie / 100, lJ = k * r.benzyna_na_lpg / 100, lR = r.uruchomienia * r.rozruch, lB = lJ + lR;
-    kwota = Math.round((lLpg * r.cena_litra + lB * r.cena_benzyny) * proc);
-    opis = `LPG: ${km(k)} km × ${l(r.spalanie)} l/100 km = ${l(lLpg)} l × ${c(r.cena_litra)} zł; benzyna: ${l(lJ)} l w jeździe + `
-      + `${r.uruchomienia} uruchomień × ${l(r.rozruch)} l = ${l(lB)} l × ${c(r.cena_benzyny)} zł`;
+    kwota = zaokr((lLpg * r.cena_litra + lB * r.cena_benzyny) * proc);
+    opis = `LPG: ${km(k)} km × ${l(r.spalanie, 3)} l/100 km = ${l(lLpg)} l × ${c(r.cena_litra)} zł; benzyna: ${l(lJ)} l w jeździe + `
+      + `${r.uruchomienia} uruchomień × ${l(r.rozruch, 3)} l = ${l(lB)} l × ${c(r.cena_benzyny)} zł`;
   } else {
     const lit = k * r.spalanie / 100;
-    kwota = Math.round(lit * r.cena_litra * proc);
-    opis = `${km(k)} km × ${l(r.spalanie)} l/100 km = ${l(lit)} l × ${c(r.cena_litra)} zł/l`;
+    kwota = zaokr(lit * r.cena_litra * proc);
+    opis = `${km(k)} km × ${l(r.spalanie, 3)} l/100 km = ${l(lit)} l × ${c(r.cena_litra)} zł/l`;
   }
   if (r.procent !== 100) opis += ` × ${r.procent}%`;
   return [kwota, opis];

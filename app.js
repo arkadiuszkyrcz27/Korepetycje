@@ -375,7 +375,7 @@ function arkuszUcznia(id) {
       const w = { id: stary ? stary.id : L.noweId(), imie: wartosc(el, "#f-imie").trim(), nazwisko: wartosc(el, "#f-nazwisko").trim(),
         platnik: wartosc(el, "#f-platnik").trim(), adres_platnika: L.zlozAdres(wartosc(el, "#f-ulica"), wartosc(el, "#f-kod")),
         kontakt: wartosc(el, "#f-kontakt").trim(), stawka, aktywny: el.querySelector("#f-aktywny").checked, notatki: wartosc(el, "#f-notatki"),
-        dojazd: el.querySelector("#f-dojazd").checked, km: Math.round(L.liczba(wartosc(el, "#f-km")) * 10) / 10 };
+        dojazd: el.querySelector("#f-dojazd").checked, km: L.zaokr(L.liczba(wartosc(el, "#f-km")), 1) };
       if (!w.imie || !w.platnik) { blad.textContent = "Podaj imię ucznia i rodzica płacącego."; return; }
       await wykonaj(async () => {
         await upsert("uczniowie", w, "id");
@@ -660,8 +660,8 @@ function arkuszDojazdow(miesiac) {
         <input data-i="${i}" inputmode="decimal" value="${L.km(p.km)}"><small>km</small></div>`).join("") : '<div class="cicho">Brak lekcji z dojazdem w tym miesiącu.</div>';
     };
     const odczytaj = () => {
-      el.querySelectorAll("#f-kursy input").forEach(x => pozycje[Number(x.dataset.i)].km = Math.round(L.liczba(x.value) * 10) / 10);
-      const r = { miesiac, metoda: wartosc(el, "#f-metoda"), paliwo: wartosc(el, "#f-paliwo"), km: Math.round(pozycje.reduce((s, p) => s + p.km, 0) * 10) / 10,
+      el.querySelectorAll("#f-kursy input").forEach(x => pozycje[Number(x.dataset.i)].km = L.zaokr(L.liczba(x.value), 1));
+      const r = { miesiac, metoda: wartosc(el, "#f-metoda"), paliwo: wartosc(el, "#f-paliwo"), km: L.zaokr(pozycje.reduce((s, p) => s + p.km, 0), 1),
         spalanie: L.liczba(wartosc(el, "#f-spal")), cena_litra: kw("#f-cena"), suma_paragonow: kw("#f-par"), przebieg: L.liczba(wartosc(el, "#f-przeb")),
         procent: Math.min(100, Math.max(1, parseInt(wartosc(el, "#f-proc")) || 100)), benzyna_na_lpg: 0, rozruch: 0, cena_benzyny: 0, paragony_benzyna: 0,
         uruchomienia: L.URUCHOMIENIA_NA_KURS * pozycje.length, pozycje: JSON.stringify(pozycje) };
