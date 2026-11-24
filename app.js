@@ -31,6 +31,18 @@ const kolorUcznia = u => { let h = 0; for (const c of u.id) h = (h * 31 + c.char
 const ikonaUcznia = (u, r = 36) => `<span class="ik-ucz" style="--k:${kolorUcznia(u)};width:${r}px;height:${r}px">${ikona("uczniowie")}</span>`;
 
 // ================================================================ dane
+// Wersja bazy w chmurze (tabela wersja_schematu, skrypty w folderze „supabase”) wymagana przez tę wersję aplikacji.
+// Po dodaniu skryptu 08, 09… podnieś ją razem z WYMAGANA_WERSJA_CHMURY w korepetycje/chmura.py (zobacz WDROZENIE.md).
+const WYMAGANA_WERSJA_BAZY = 7;
+async function bladWersjiBazy() {
+  const { data, error } = await sb.from("wersja_schematu").select("wersja").eq("id", 1).maybeSingle();
+  if (error && !/does not exist|schema cache|wersja_schematu/i.test(error.message || "")) throw error;   // np. brak internetu
+  const w = error ? 0 : (data?.wersja || 0);
+  if (w >= WYMAGANA_WERSJA_BAZY) return null;
+  return w === 0
+    ? "Baza w chmurze nie ma numeru wersji. Na komputerze uruchom w Supabase skrypt 07_wersja_schematu.sql z folderu „supabase” (zobacz WDROZENIE.md)."
+    : `Baza w chmurze ma wersję ${w}, a aplikacja wymaga ${WYMAGANA_WERSJA_BAZY}. Uruchom w Supabase brakujące skrypty z folderu „supabase” (zobacz WDROZENIE.md).`;
+}
 async function zaladuj() {
   const wyn = await Promise.all(TABELE.map(t => sb.from(t).select("*").range(0, 9999)));
   wyn.forEach((w, i) => {
@@ -903,7 +915,16 @@ async function start() {
   sesjaEmail = session.user?.email || "";
   $("#logowanie").hidden = true; $("#aplikacja").hidden = false;
   pokazLadowanie(true);
-  try { await zaladuj(); }
+  try {
+    const bladWersji = await bladWersjiBazy();
+    if (bladWersji) {                    // za stara baza: nie pokazujemy ani nie zapisujemy danych, które mogłyby się nie zgadzać
+      pokazLadowanie(false);
+      $("#tresc").innerHTML = `<p class="zle-blok">${esc(bladWersji)}<br>Dane są bezpieczne – aplikacja poczeka na aktualizację bazy.</p>`
+        + `<button class="btn" onclick="location.reload()">Sprawdź ponownie</button>`;
+      return;
+    }
+    await zaladuj();
+  }
   catch (e) {
     pokazLadowanie(false);
     if (/JWT|token|401/i.test(e.message || "")) { await sb.auth.signOut(); return ekranLogowania("Sesja wygasła – zaloguj się ponownie."); }
