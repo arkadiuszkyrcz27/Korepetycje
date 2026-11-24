@@ -156,7 +156,7 @@ const AKCJE = {
   dojazdy: () => arkuszDojazdow(`${stan.r}-${String(stan.m).padStart(2, "0")}`),
   rok: ({ k }) => { stan.rokLimity += Number(k); rysuj(); },
   inne: ({ kw }) => arkuszInnych(kw),
-  wyloguj: async () => { if (await potwierdz("Wylogować z aplikacji?", "Wyloguj")) { await sb.auth.signOut(); location.reload(); } },
+  wyloguj: async () => { if (await potwierdz("Wylogować z aplikacji?", "Wyloguj")) { await sb.auth.signOut({ scope: "local" }); location.reload(); } },
   sekcja: ({ s }) => arkuszUstawien(s),
   odswiez: async () => { pokazLadowanie(true); try { await zaladuj(); rysuj(); toast("Odświeżono"); } finally { pokazLadowanie(false); } },
 };
@@ -913,6 +913,7 @@ async function start() {
   pokazLadowanie(false);
   rysuj();
   sb.channel("zmiany").on("postgres_changes", { event: "*", schema: "public" }, odswiezPozniej).subscribe();
+  sb.auth.onAuthStateChange(ev => { if (ev === "SIGNED_OUT") ekranLogowania("Sesja wygasła – zaloguj się ponownie."); });
   document.addEventListener("visibilitychange", () => { if (!document.hidden) odswiezPozniej(); });
 }
 ustawMotyw();

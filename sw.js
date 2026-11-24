@@ -1,5 +1,5 @@
 // Service worker: pliki aplikacji z pamięci telefonu (szybki start), dane zawsze z chmury.
-const WERSJA = "korepetycje-v1";
+const WERSJA = "korepetycje-v2";
 const PLIKI = ["./", "index.html", "app.css", "app.js", "logika.js", "konfiguracja.js", "supabase.js",
   "manifest.webmanifest", "ikona-192.png", "ikona-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(WERSJA).then(c => c.addAll(PLIKI))); self.skipWaiting(); });
